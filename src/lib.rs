@@ -6,9 +6,8 @@ pub mod error;
 pub mod command;
 pub mod player;
 pub mod settlement;
+pub mod history;
 pub mod state;
-pub mod nugget;
-pub mod market;
 
 use crate::config::Config;
 use crate::state::{GlobalState, Transaction};

@@ -1,17 +1,14 @@
-use crate::market::MarketNugget;
-use crate::market::bid;
-use crate::market::settle;
-use crate::market::list;
-use crate::nugget::NuggetInfo;
 use zkwasm_rest_convention::IndexedObject;
 use zkwasm_rust_sdk::require;
 use zkwasm_rest_abi::WithdrawInfo;
+use zkwasm_rest_abi::enforce;
 use zkwasm_rest_convention::WithBalance;
+use crate::history::RoundResult;
 use crate::settlement::SettlementInfo;
 use crate::player::GamePlayer;
+use crate::player::RoundInfo;
 use crate::state::GLOBAL_STATE;
 use crate::error::*;
-use crate::config::{NUGGET_INFO, MARKET_INFO};
 
 #[derive (Clone)]
 pub enum Command {
@@ -81,94 +78,47 @@ impl CommandHandler for Deposit {
 #[derive (Clone)]
 pub enum Activity {
     // activities
-    Create,
-    Bid(u64, u64),
-    Sell(u64),
-    Recycle(u64),
-    Explore(u64),
-    List(u64, u64),
+    Buy(u64, u64),
+    Settle(u64),
 }
 
 
 impl CommandHandler for Activity {
-    fn handle(&self, pid: &[u64; 2], nonce: u64, rand: &[u64; 4], counter: u64) -> Result<(), u32> {
+    fn handle(&self, pid: &[u64; 2], nonce: u64, _rand: &[u64; 4], counter: u64) -> Result<(), u32> {
         let mut player = GamePlayer::get_from_pid(pid);
         match player.as_mut() {
             None => Err(ERROR_PLAYER_NOT_EXIST),
             Some(player) => {
                 player.check_and_inc_nonce(nonce);
+                let mut state = GLOBAL_STATE.0.borrow_mut();
                 match self {
-                    Activity::Create => {
-                        if player.data.inventory.len() > player.data.inventory_size as usize {
-                            Err(PLAYER_NOT_ENOUGH_INVENTORY)
-                        } else {
-                            player.data.cost_balance(5000)?;
-                            let mut global = GLOBAL_STATE.0.borrow_mut();
-                            let mut nugget = NuggetInfo::new_object(NuggetInfo::new(global.total, rand[1]), global.total);
-                            nugget.data.compute_sysprice();
-                            nugget.store();
-                            NuggetInfo::emit_event(NUGGET_INFO, &nugget.data);
-                            global.total += 1;
-                            player.data.inventory.push(nugget.data.id);
-                            player.store();
-                            Ok(())
+                    Activity::Buy(index, amount) => {
+                        enforce(*index <  26, "Index must less than 26");
+                        let round = state.round;
+                        let price = 100000/counter;
+                        player.data.cost_balance(price)?;
+                        let round_result = RoundResult::get_object(player.data.round).unwrap();
+                        if round > player.data.round {
+                            player.data.rounds.push(RoundInfo {
+                                round: player.data.round,
+                                ratio: player.data.get_purchase(round_result.data.winner)
+                            });
+                            player.data.round = round;
+                            player.data.purchase = vec![];
                         }
-                    },
+                        state.cards[*index as usize] += amount;
+                        state.pool += price;
+                        player.data.inc_purchase(*index, *amount);
 
-                    Activity::Explore(index) => {
-                        if player.data.inventory.len() <= (*index) as usize {
-                            Err(INVALID_NUGGET_INDEX)
+                        Ok(())
+                    },
+                    Activity::Settle(round) => {
+                        let state = GLOBAL_STATE.0.borrow();
+                        if *round < state.round {
+                            player.data.settle(*round, state.round)
                         } else {
-                            let nuggetid = player.data.inventory[*index as usize];
-                            let mut nugget = NuggetInfo::get_object(nuggetid).unwrap();
-                            if nugget.data.marketid != 0 {
-                                Err(NUGGET_IN_USE)
-                            } else {
-                                player.data.cost_balance(nugget.data.sysprice / 4)?;
-                                nugget.data.explore(rand[2])?;
-                                nugget.data.compute_sysprice();
-                                NuggetInfo::emit_event(NUGGET_INFO, &nugget.data);
-                                nugget.store();
-                                player.store();
-                                Ok(())
-                            }
+                            Err(ROUND_NOT_FINISHED)
                         }
-                    },
-
-
-                    Activity::Recycle(index) => {
-                        if player.data.inventory.len() <= (*index) as usize {
-                            Err(INVALID_NUGGET_INDEX)
-                        } else {
-                            let nuggetid = player.data.inventory[*index as usize];
-                            let mut nugget = NuggetInfo::get_object(nuggetid).unwrap();
-                            player.data.inc_balance(nugget.data.sysprice);
-                            nugget.data.cycle = 1;
-                            player.data.inventory.swap_remove(*index as usize);
-                            nugget.store();
-                            player.store();
-                            Ok(())
-                        }
-                    },
-
-                    Activity::List(index, askprice) => {
-                        if player.data.inventory.len() <= (*index) as usize {
-                            Err(INVALID_NUGGET_INDEX)
-                        } else {
-                            let nuggetid = player.data.inventory[*index as usize];
-                            list(player, nuggetid, *askprice)?;
-                            player.data.inventory.swap_remove(*index as usize); // remove
-                            Ok(())
-                        }
-                    },
-
-
-                    Activity::Sell(index) => {
-                        settle(player, *index, counter)
-                    },
-
-                    Activity::Bid(mid, price) => {
-                        bid(player, *mid, *price, counter)
                     }
                 }
             }
@@ -183,13 +133,8 @@ pub fn decode_error(e: u32) -> &'static str {
         ERROR_NOT_SELECTED_PLAYER => "PlayerNotSelected",
         SELECTED_PLAYER_NOT_EXIST => "SelectedPlayerNotExist",
         PLAYER_NOT_ENOUGH_BALANCE=> "PlayerNotEnoughBalance",
-        INVALID_NUGGET_INDEX => "SpecifiedNuggetIndexNotFound",
-        PLAYER_NOT_ENOUGH_INVENTORY=> "PlayerInventoryFull",
-        ERROR_BID_PRICE_INSUFFICIENT => "BidPriceInsufficient",
-        ERROR_NUGGET_ATTRIBUTES_ALL_EXPLORED => "NuggetAttributeAllExplored",
-        INVALID_MARKET_INDEX => "InvalidMarketIndex",
-        ERROR_NO_BIDDER => "NoBidderForThisItem",
-        ERROR_NOT_LISTED => "NuggetNotListed",
+        ROUND_NO_REWARD => "RoundNoReward",
+        ROUND_NOT_FINISHED => "RoundNotFinished",
         _ => "Unknown",
     }
 }

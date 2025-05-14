@@ -1,12 +1,12 @@
 [package]
-name = "automata0x"
+name = "uwin"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "automata0x"
+name = "uwin"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 

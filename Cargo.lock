@@ -3,21 +3,6 @@
 version = 3
 
 [[package]]
-name = "automata0x"
-version = "0.1.0"
-dependencies = [
- "lazy_static",
- "primitive-types",
- "serde",
- "serde_json",
- "sha2",
- "wasm-bindgen",
- "zkwasm-rest-abi",
- "zkwasm-rest-convention",
- "zkwasm-rust-sdk",
-]
-
-[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -271,6 +256,21 @@ name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
+
+[[package]]
+name = "uwin"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "primitive-types",
+ "serde",
+ "serde_json",
+ "sha2",
+ "wasm-bindgen",
+ "zkwasm-rest-abi",
+ "zkwasm-rest-convention",
+ "zkwasm-rust-sdk",
+]
 
 [[package]]
 name = "version_check"

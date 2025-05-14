@@ -2,6 +2,7 @@ use crate::config::ADMIN_PUBKEY;
 use crate::player::{Owner, GamePlayer};
 use crate::settlement::SettlementInfo;
 use crate::Player;
+use core::slice::IterMut;
 use serde::Serialize;
 use std::cell::RefCell;
 use zkwasm_rest_abi::MERKLE_MAP;
@@ -12,54 +13,49 @@ use crate::command::Activity;
 use crate::command::Deposit;
 use crate::command::Withdraw;
 use crate::command::CommandHandler;
-use crate::error::*;
+use crate::history::RoundResult;
+use zkwasm_rest_convention::IndexedObject;
 use zkwasm_rest_convention::clear_events;
+use crate::error::*;
 
 
 #[derive(Serialize)]
 pub struct GlobalState {
-    pub total: u64,
+    pub round: u64,
     pub counter: u64,
-    pub txsize: u64,
-    pub airdrop: u64,
+    pub pool: u64,
+    pub cards: Vec<u64>,
 }
+
+
 
 #[derive(Serialize)]
 pub struct QueryState {
-    total: u64,
+    round: u64,
     counter: u64,
-    airdrop: u64,
 }
 
 const TICK: u64 = 0;
 const INSTALL_PLAYER: u64 = 1;
 const WITHDRAW: u64 = 2;
 const DEPOSIT: u64 = 3;
-
-const EXPLORE_NUGGET: u64 = 4;
-const SELL_NUGGET: u64 = 5;
-const BID_NUGGET: u64 = 6;
-const CREATE_NUGGET: u64 = 7;
-const RECYCLE_NUGGET: u64 = 8;
-const LIST_NUGGET: u64 = 9;
-
-
+const BUY_CARD: u64 = 4;
+const CLAIM_REWARD: u64 = 5;
 
 impl GlobalState {
     pub fn new() -> Self {
         GlobalState {
-            total: 0,
+            round: 0,
             counter: 0,
-            txsize: 0,
-            airdrop: 10000000
+            pool: 0,
+            cards: vec![],
         }
     }
 
     pub fn snapshot() -> String {
-        let total = GLOBAL_STATE.0.borrow().total;
+        let round = GLOBAL_STATE.0.borrow().round;
         let counter = GLOBAL_STATE.0.borrow().counter;
-        let airdrop = GLOBAL_STATE.0.borrow().airdrop;
-        serde_json::to_string(&QueryState { counter, total, airdrop }).unwrap()
+        serde_json::to_string(&QueryState { counter, round}).unwrap()
     }
 
     pub fn get_state(pid: Vec<u64>) -> String {
@@ -68,15 +64,27 @@ impl GlobalState {
     }
 
     pub fn preempt() -> bool {
-        let mut state = GLOBAL_STATE.0.borrow_mut();
-        let counter = state.counter;
-        let txsize = state.txsize;
-        let withdraw_size = SettlementInfo::settlement_size();
-        if counter % 600 == 0 || txsize >= 10 || withdraw_size > 40 {
-            state.txsize = 0;
+        let state = GLOBAL_STATE.0.borrow_mut();
+        if state.counter == 0 {
             return true;
         } else {
             return false;
+        }
+    }
+
+    pub fn get_result(&self) -> RoundResult {
+        let mut min = 0;
+        let mut idx = 0;
+        for i in 0..self.cards.len() {
+          if self.cards[i] < min {
+              min = self.cards[i];
+              idx = i;
+          }
+        }
+        return RoundResult {
+            pool: self.pool,
+            total: min,
+            winner: idx as u64,
         }
     }
 
@@ -90,9 +98,7 @@ impl GlobalState {
 
     pub fn store_into_kvpair(&self) {
         let mut v = vec![];
-        v.push(self.counter);
-        v.push(self.airdrop);
-        v.push(self.total);
+        v.push(self.round);
         let kvpair = unsafe { &mut MERKLE_MAP };
         kvpair.set(&[0, 0, 0, 0], v.as_slice());
     }
@@ -102,12 +108,8 @@ impl GlobalState {
         let mut data = kvpair.get(&[0, 0, 0, 0]);
         if !data.is_empty() {
             let mut u64data = data.iter_mut();
-            let counter = *u64data.next().unwrap();
-            let airdrop = *u64data.next().unwrap();
-            let total = *u64data.next().unwrap();
-            self.counter = counter;
-            self.airdrop = airdrop;
-            self.total = total;
+            let round = *u64data.next().unwrap();
+            self.round = round;
         }
     }
 
@@ -116,7 +118,11 @@ impl GlobalState {
     }
 
     pub fn initialize() {
-        GLOBAL_STATE.0.borrow_mut().fetch();
+        let mut s = GLOBAL_STATE.0.borrow_mut();
+        s.fetch();
+        s.round += 1;
+        s.counter = 1000;
+        s.cards = [0;26].to_vec();
     }
 
     pub fn get_counter() -> u64 {
@@ -155,18 +161,10 @@ impl Transaction {
             })
         } else if command == INSTALL_PLAYER {
             Command::InstallPlayer
-        } else if command == EXPLORE_NUGGET {
-            Command::Activity (Activity::Explore(params[1]))
-        } else if command == SELL_NUGGET {
-            Command::Activity (Activity::Sell(params[1]))
-        } else if command == RECYCLE_NUGGET {
-            Command::Activity (Activity::Recycle(params[1]))
-        } else if command == LIST_NUGGET {
-            Command::Activity (Activity::List(params[1], params[2]))
-        } else if command == BID_NUGGET {
-            Command::Activity (Activity::Bid(params[1], params[2]))
-        } else if command == CREATE_NUGGET {
-            Command::Activity (Activity::Create)
+        } else if command == BUY_CARD {
+            Command::Activity (Activity::Buy(params[1], params[2]))
+        } else if command == CLAIM_REWARD {
+            Command::Activity (Activity::Buy(params[1], params[2]))
         } else {
             unsafe {zkwasm_rust_sdk::require(command == TICK)};
             Command::Tick
@@ -191,11 +189,16 @@ impl Transaction {
     }
 
     pub fn tick(&self) {
-        GLOBAL_STATE.0.borrow_mut().counter += 1;
-    }
-
-    pub fn inc_tx_number(&self) {
-        GLOBAL_STATE.0.borrow_mut().txsize += 1;
+        let mut s = GLOBAL_STATE.0.borrow_mut();
+        enforce(s.counter > 0, "counter must large than 1");
+        s.counter -= 1;
+        if s.counter == 0 {
+            let state = GLOBAL_STATE.0.borrow();
+            let result = state.get_result();
+            let r = RoundResult::new_object(result, state.round);
+            r.store();
+            RoundResult::emit_event(state.round, &r.data);
+        }
     }
 
     pub fn process(&self, pkey: &[u64; 4], rand: &[u64; 4]) -> Vec<u64> {
@@ -222,11 +225,10 @@ impl Transaction {
         match self.command {
             Command::Tick => (),
             _ => {
-                self.inc_tx_number();
                 self.tick();
             }
         }
-        let txsize = GLOBAL_STATE.0.borrow().txsize;
-        clear_events(vec![e as u64, txsize])
+        let round = GLOBAL_STATE.0.borrow().round;
+        clear_events(vec![e as u64, round])
     }
 }

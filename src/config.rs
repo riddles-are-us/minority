@@ -31,8 +31,7 @@ impl Config {
 
     // enable timer tick
     pub fn autotick() -> bool {
-        //true
-        false
+        true
     }
 }
 

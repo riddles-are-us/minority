@@ -90,15 +90,15 @@ impl CommandHandler for Activity {
             None => Err(ERROR_PLAYER_NOT_EXIST),
             Some(player) => {
                 player.check_and_inc_nonce(nonce);
-                let mut state = GLOBAL_STATE.0.borrow_mut();
                 match self {
                     Activity::Buy(index, amount) => {
                         enforce(*index <  26, "Index must less than 26");
-                        let round = state.round;
-                        let price = 100000/counter;
+                        let price = 1000/(1 + (counter+1).ilog2() as u64);
                         player.data.cost_balance(price)?;
-                        let round_result = RoundResult::get_object(player.data.round).unwrap();
+                        let mut state = GLOBAL_STATE.0.borrow_mut();
+                        let round = state.round;
                         if round > player.data.round {
+                            let round_result = RoundResult::get_object(player.data.round).unwrap();
                             player.data.rounds.push(RoundInfo {
                                 round: player.data.round,
                                 ratio: player.data.get_purchase(round_result.data.winner)
@@ -109,13 +109,15 @@ impl CommandHandler for Activity {
                         state.cards[*index as usize] += amount;
                         state.pool += price;
                         player.data.inc_purchase(*index, *amount);
-
+                        player.store();
                         Ok(())
                     },
                     Activity::Settle(round) => {
                         let state = GLOBAL_STATE.0.borrow();
                         if *round < state.round {
-                            player.data.settle(*round, state.round)
+                            player.data.settle(*round, state.round)?;
+                            player.store();
+                            Ok(())
                         } else {
                             Err(ROUND_NOT_FINISHED)
                         }

@@ -33,6 +33,8 @@ pub struct GlobalState {
 pub struct QueryState {
     round: u64,
     counter: u64,
+    pool: u64,
+    cards: Vec<u64>,
 }
 
 const TICK: u64 = 0;
@@ -55,7 +57,9 @@ impl GlobalState {
     pub fn snapshot() -> String {
         let round = GLOBAL_STATE.0.borrow().round;
         let counter = GLOBAL_STATE.0.borrow().counter;
-        serde_json::to_string(&QueryState { counter, round}).unwrap()
+        let pool = GLOBAL_STATE.0.borrow().pool;
+        let cards = GLOBAL_STATE.0.borrow().cards.clone();
+        serde_json::to_string(&QueryState { counter, round, pool, cards}).unwrap()
     }
 
     pub fn get_state(pid: Vec<u64>) -> String {
@@ -76,7 +80,7 @@ impl GlobalState {
         let mut min = 0;
         let mut idx = 0;
         for i in 0..self.cards.len() {
-          if self.cards[i] < min {
+          if (self.cards[i] < min || min == 0) && self.cards[i] != 0 {
               min = self.cards[i];
               idx = i;
           }
@@ -121,7 +125,7 @@ impl GlobalState {
         let mut s = GLOBAL_STATE.0.borrow_mut();
         s.fetch();
         s.round += 1;
-        s.counter = 1000;
+        s.counter = 5;
         s.cards = [0;26].to_vec();
     }
 
@@ -164,7 +168,7 @@ impl Transaction {
         } else if command == BUY_CARD {
             Command::Activity (Activity::Buy(params[1], params[2]))
         } else if command == CLAIM_REWARD {
-            Command::Activity (Activity::Buy(params[1], params[2]))
+            Command::Activity (Activity::Settle(params[1]))
         } else {
             unsafe {zkwasm_rust_sdk::require(command == TICK)};
             Command::Tick
@@ -176,12 +180,14 @@ impl Transaction {
     }
 
     pub fn create_player(&self, pkey: &[u64; 4]) -> Result<(), u32> {
+        let round = GLOBAL_STATE.0.borrow().round;
         let player = GamePlayer::get(pkey);
         match player {
             Some(_) => Err(ERROR_PLAYER_ALREADY_EXIST),
             None => {
                 let mut player = Player::new(pkey);
                 player.data.balance = 100000;
+                player.data.round = round;
                 player.store();
                 Ok(())
             }
@@ -193,11 +199,11 @@ impl Transaction {
         enforce(s.counter > 0, "counter must large than 1");
         s.counter -= 1;
         if s.counter == 0 {
-            let state = GLOBAL_STATE.0.borrow();
-            let result = state.get_result();
-            let r = RoundResult::new_object(result, state.round);
+            let result = s.get_result();
+            let r = RoundResult::new_object(result, s.round);
+            zkwasm_rust_sdk::dbg!("store ... {}\n", {s.round});
             r.store();
-            RoundResult::emit_event(state.round, &r.data);
+            RoundResult::emit_event(s.round, &r.data);
         }
     }
 
@@ -222,13 +228,11 @@ impl Transaction {
                     .map_or_else(|e| e, |_| 0)
             },
         };
-        match self.command {
-            Command::Tick => (),
-            _ => {
-                self.tick();
-            }
-        }
         let round = GLOBAL_STATE.0.borrow().round;
-        clear_events(vec![e as u64, round])
+        zkwasm_rust_sdk::dbg!("events before {:?}\n", {unsafe {&zkwasm_rest_convention::EVENTS}});
+        let events = clear_events(vec![e as u64, round]);
+        zkwasm_rust_sdk::dbg!("events {:?}\n", {unsafe {&zkwasm_rest_convention::EVENTS}});
+        zkwasm_rust_sdk::dbg!("events {:?}\n", {&events});
+        events
     }
 }

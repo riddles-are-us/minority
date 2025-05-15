@@ -101,7 +101,7 @@ impl StorageData for PlayerData {
         }
         let plength = *u64data.next().unwrap();
         let mut purchase = Vec::with_capacity(plength as usize);
-        for _ in 0..ilength {
+        for _ in 0..plength {
             purchase.push(*u64data.next().unwrap());
         }
         PlayerData {

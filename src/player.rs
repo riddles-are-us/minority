@@ -70,17 +70,22 @@ impl PlayerData {
     }
     pub fn settle(&mut self, round: u64, global_round: u64) -> Result<(), u32> {
         let r = RoundResult::get_object(round).unwrap();
+        zkwasm_rust_sdk::dbg!("settle {} {}\n", {r.data.total}, {r.data.pool});
         for i in 0..self.rounds.len() {
             let p = self.rounds[i].clone();
             if p.round == round {
-                self.inc_balance(r.data.pool * p.ratio / r.data.total);
+                if r.data.total>0 {
+                    self.inc_balance(r.data.pool * p.ratio / r.data.total);
+                }
                 self.rounds.swap_remove(i);
                 return Ok(())
             }
         }
         if self.round == round {
             let ratio = self.get_purchase(r.data.winner);
-            self.inc_balance(r.data.pool * ratio / r.data.total);
+            if r.data.total>0 {
+                self.inc_balance(r.data.pool * ratio / r.data.total);
+            }
             self.round = global_round;
             self.purchase = vec![];
             return Ok(())

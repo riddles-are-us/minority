@@ -23,7 +23,6 @@ function fromData(u64data: bigint[]): RoundResult {
 }
 
 export function docToJSON(doc: mongoose.Document) {
-    console.log("doc...", doc);
     const obj = doc.toObject({
         transform: (_, ret:any) => {
             delete ret._id;

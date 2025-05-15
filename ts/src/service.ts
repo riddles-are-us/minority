@@ -92,11 +92,9 @@ async function eventCallback(arg: TxWitness, data: BigUint64Array) {
             }
             break;
             case EVENT_STATE_UPDATE:
-                {
-                console.log("indexed object event:");
+            {
                 let obj = IndexedObject.fromEvent(eventData);
-                let doc = await obj.storeObject();
-                console.log("indexed object", doc);
+                await obj.storeObject();
             }
             break;
             default:

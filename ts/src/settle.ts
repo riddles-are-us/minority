@@ -26,27 +26,16 @@ async function main() {
   let r = await player.rpc.queryConfig();
   console.log("config:", r);
 
-  console.log("Start run CREATE_PLAYER...");
-  await player.runCommand(INSTALL_PLAYER, 0n, []);
 
   let g = await player.getState();
-  console.log("state.", g);
+  console.log("state:", g);
 
-  console.log("Start run buy card ...");
+  let rounds = g.player.data.rounds;
+  for (const r of rounds) {
+      console.log(r);
+  }
+
   let nonce = await player.getNonce();
-  await player.runCommand(BUY_CARD, nonce, [0n, 1n]);
-
-  console.log("Start run buy card ...");
-  nonce = await player.getNonce();
-  await player.runCommand(BUY_CARD, nonce, [1n, 2n]);
-
-  console.log("Start run buy card ...");
-  nonce = await player.getNonce();
-  await player.runCommand(BUY_CARD, nonce, [3n, 3n]);
-
-
-  g = await player.getState();
-  console.log("state.", g);
 
   console.log("Start run query rounds ...");
   try {
@@ -56,18 +45,10 @@ async function main() {
     console.log(e);
   }
 
-  console.log("Start settle ...");
-  try {
-    let data:any = await player.rpc.queryData(`rounds`);
-    console.log(data);
-  } catch(e) {
-    console.log(e);
-  }
 
-  let rounds = g.player.data.rounds;
-  for (const r of rounds) {
-      console.log(r);
-  }
+
+  await player.runCommand(CLAIM_REWARD, nonce, [BigInt(rounds[0].round)]);
+
 
 }
 

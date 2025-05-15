@@ -114,6 +114,7 @@ impl CommandHandler for Activity {
                     },
                     Activity::Settle(round) => {
                         let state = GLOBAL_STATE.0.borrow();
+                        zkwasm_rust_sdk::dbg!("round {}\n", {*round});
                         if *round < state.round {
                             player.data.settle(*round, state.round)?;
                             player.store();

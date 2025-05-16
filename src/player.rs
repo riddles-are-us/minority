@@ -29,11 +29,17 @@ impl StorageData for RoundInfo {
 }
 
 #[derive(Clone, Serialize, Debug)]
+pub struct PurchaseInfo {
+    pub index: u32,
+    pub amount: u32,
+}
+
+#[derive(Clone, Serialize, Debug)]
 pub struct PlayerData {
     pub balance: u64,
     pub round: u64,
     pub rounds: Vec<RoundInfo>,
-    pub purchase: Vec<u64>,
+    pub purchase: Vec<PurchaseInfo>,
 }
 
 
@@ -51,22 +57,25 @@ impl Default for PlayerData {
 impl PlayerData {
     pub fn get_purchase(&self, index: u64) -> u64 {
         for p in self.purchase.iter() {
-            let i = *p >> 32;
+            let i = p.index as u64;
             if i == index {
-                return *p & 0xffffffff;
+                return p.amount as u64;
             }
         }
         return 0
     }
     pub fn inc_purchase(&mut self, index: u64, amount: u64) {
         for p in self.purchase.iter_mut() {
-            let i = *p >> 32;
+            let i = p.index as u64;
             if i == index {
-                *p = (i << 32) + ((*p & 0xffffffff) + amount);
+                p.amount += amount as u32;
                 return;
             }
         }
-        self.purchase.push((index << 32) + amount)
+        self.purchase.push(PurchaseInfo{
+            index: index as u32,
+            amount: amount as u32,
+        })
     }
     pub fn settle(&mut self, round: u64, global_round: u64) -> Result<(), u32> {
         let r = RoundResult::get_object(round).unwrap();
@@ -107,7 +116,11 @@ impl StorageData for PlayerData {
         let plength = *u64data.next().unwrap();
         let mut purchase = Vec::with_capacity(plength as usize);
         for _ in 0..plength {
-            purchase.push(*u64data.next().unwrap());
+            let i = *u64data.next().unwrap();
+            purchase.push(PurchaseInfo {
+                index: (i >> 32) as u32,
+                amount: (i & 0xffffffff) as u32,
+            });
         }
         PlayerData {
             balance,
@@ -125,7 +138,7 @@ impl StorageData for PlayerData {
         }
         data.push(self.purchase.len() as u64);
         for p in self.purchase.iter() {
-            data.push(*p)
+            data.push(((p.index as u64) << 32) + (p.amount as u64))
         }
     }
 }

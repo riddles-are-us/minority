@@ -43,6 +43,7 @@ const WITHDRAW: u64 = 2;
 const DEPOSIT: u64 = 3;
 const BUY_CARD: u64 = 4;
 const CLAIM_REWARD: u64 = 5;
+const SETTLE: u64 = 6;
 
 impl GlobalState {
     pub fn new() -> Self {
@@ -125,7 +126,7 @@ impl GlobalState {
         let mut s = GLOBAL_STATE.0.borrow_mut();
         s.fetch();
         s.round += 1;
-        s.counter = 5;
+        s.counter = 50;
         s.cards = [0;26].to_vec();
     }
 
@@ -154,6 +155,8 @@ impl Transaction {
     pub fn decode(params: &[u64]) -> Self {
         let command = params[0] & 0xff;
         let nonce = params[0] >> 16;
+        //zkwasm_rust_sdk::dbg!("command is {}\n", command); // only token index 0 is supported
+        //zkwasm_rust_sdk::dbg!("nonce is {}\n", nonce); // only token index 0 is supported
         let command = if command == WITHDRAW {
             Command::Withdraw (Withdraw {
                 data: [params[2], params[3], params[4]]
@@ -168,7 +171,9 @@ impl Transaction {
         } else if command == BUY_CARD {
             Command::Activity (Activity::Buy(params[1], params[2]))
         } else if command == CLAIM_REWARD {
-            Command::Activity (Activity::Settle(params[1]))
+            Command::Activity (Activity::Claim(params[1]))
+        } else if command == SETTLE {
+            Command::Activity (Activity::Settle)
         } else {
             unsafe {zkwasm_rust_sdk::require(command == TICK)};
             Command::Tick

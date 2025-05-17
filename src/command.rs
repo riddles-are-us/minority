@@ -79,7 +79,8 @@ impl CommandHandler for Deposit {
 pub enum Activity {
     // activities
     Buy(u64, u64),
-    Settle(u64),
+    Claim(u64),
+    Settle,
 }
 
 
@@ -99,10 +100,13 @@ impl CommandHandler for Activity {
                         let round = state.round;
                         if round > player.data.round {
                             let round_result = RoundResult::get_object(player.data.round).unwrap();
-                            player.data.rounds.push(RoundInfo {
-                                round: player.data.round,
-                                ratio: player.data.get_purchase(round_result.data.winner)
-                            });
+                            let ratio = player.data.get_purchase(round_result.data.winner);
+                            if ratio != 0 {
+                                player.data.rounds.push(RoundInfo {
+                                    round: player.data.round,
+                                    ratio
+                                });
+                            }
                             player.data.round = round;
                             player.data.purchase = vec![];
                         }
@@ -112,9 +116,9 @@ impl CommandHandler for Activity {
                         player.store();
                         Ok(())
                     },
-                    Activity::Settle(round) => {
+                    Activity::Claim(round) => {
                         let state = GLOBAL_STATE.0.borrow();
-                        zkwasm_rust_sdk::dbg!("round {}\n", {*round});
+                        zkwasm_rust_sdk::dbg!("claim reward of round {}\n", {*round});
                         if *round < state.round {
                             player.data.settle(*round, state.round)?;
                             player.store();
@@ -123,6 +127,26 @@ impl CommandHandler for Activity {
                             Err(ROUND_NOT_FINISHED)
                         }
                     }
+                    Activity::Settle => {
+                        let state = GLOBAL_STATE.0.borrow();
+                        let round = state.round;
+                        zkwasm_rust_sdk::dbg!("settle {}\n", {round});
+                        if round > player.data.round {
+                            let round_result = RoundResult::get_object(player.data.round).unwrap();
+                            let ratio = player.data.get_purchase(round_result.data.winner);
+                            if ratio != 0 {
+                                player.data.rounds.push(RoundInfo {
+                                    round: player.data.round,
+                                    ratio
+                                });
+                            }
+                            player.data.round = round;
+                            player.data.purchase = vec![];
+                        }
+                        player.store();
+                        Ok(())
+                    }
+
                 }
             }
         }

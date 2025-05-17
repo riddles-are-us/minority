@@ -16,7 +16,6 @@ function extra (app: Express) {
           const jdoc = doc.map((d) => {
               return docToJSON(d);
           });
-          console.log(jdoc);
           res.status(201).send({
               success: true,
               data: jdoc,
@@ -26,6 +25,26 @@ function extra (app: Express) {
           res.status(500).send()
       }
   });
+  app.get('/data/round/:round', async(req:any, res) => {
+      let round = req.params.round;
+      try {
+          const doc = await StateObjectModel.find(
+              {id: round},
+          );
+          const data = doc.map((d) => {
+              return docToJSON(d);
+          });
+          res.status(201).send({
+              success: true,
+              data: data,
+          });
+      } catch (e) {
+          console.log(e);
+          res.status(500).send()
+      }
+  });
+
+
 }
 
 

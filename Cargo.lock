@@ -335,7 +335,7 @@ checksum = "af190c94f2773fdb3729c55b007a722abb5384da03bc0986df4c289bf5567e96"
 [[package]]
 name = "zkwasm-rest-abi"
 version = "0.1.0"
-source = "git+https://github.com/DelphinusLab/zkwasm-mini-rollup?branch=xgao/dev#c654d2bae0f83b77041fe03f6b6dc700ab81795d"
+source = "git+https://github.com/DelphinusLab/zkwasm-mini-rollup?branch=xgao/dev#2662f34d7991129f18cb0e6ea35fcea07915e51a"
 dependencies = [
  "derive_builder",
  "lazy_static",
@@ -350,7 +350,7 @@ dependencies = [
 [[package]]
 name = "zkwasm-rest-convention"
 version = "0.1.0"
-source = "git+https://github.com/DelphinusLab/zkwasm-mini-rollup?branch=xgao/dev#c654d2bae0f83b77041fe03f6b6dc700ab81795d"
+source = "git+https://github.com/DelphinusLab/zkwasm-mini-rollup?branch=xgao/dev#2662f34d7991129f18cb0e6ea35fcea07915e51a"
 dependencies = [
  "derive_builder",
  "lazy_static",
